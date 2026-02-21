@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: loans-web
+    env_file:
+      - .env
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    networks:
+      - loans_network
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: loans-nginx
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - loans_network
+
+  db:
+    image: postgres:alpine
+    container_name: loans-db
+    env_file:
+      - .env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - loans_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "user", "-d", "loans"]
+      interval: 30s
+      retries: 5
+      start_period: 1m
+      timeout: 10s
+    ports:
+      - "5432:5432"
+
+networks:
+  loans_network:
+    driver: bridge
+
+volumes:
+  db_data:
