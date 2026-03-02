@@ -2,25 +2,49 @@
 
 namespace app\controllers;
 
-use app\jobs\ProcessLoansJob;
+use app\services\ProcessorService;
+use InvalidArgumentException;
 use Yii;
+use yii\base\InvalidConfigException;
 use yii\web\Controller;
 
 class ProcessorController extends Controller
 {
+    const DELAY_DEFAULT_VALUE = 5;
+
     public $enableCsrfValidation = false;
+    private ProcessorService $processorService;
 
-    public function actionIndex()
+    public function __construct($id, $module, ProcessorService $procService, $config = [])
     {
-        $delay = Yii::$app->request->get('delay', 5);
+        $this->processorService = $procService;
+        parent::__construct($id, $module, $config);
+    }
 
-        if (!is_numeric($delay) || (int)$delay < 0) {
+    /**
+     * @return array{result: bool, message?: string}
+     * @throws InvalidConfigException
+     */
+    public function actionIndex(): array
+    {
+        try {
+            $delay = $this->getDelay();
+            $this->processorService->launchLoansJob($delay);
+
+            return ['result' => true];
+        } catch (InvalidArgumentException $e) {
             return ['result' => false, 'message' => 'Invalid delay value.'];
         }
-        Yii::$app->queue->push(new ProcessLoansJob([
-            'delay' => (int)$delay,
-        ]));
+    }
 
-        return ['result' => true];
+    private function getDelay(): int
+    {
+        $delay = Yii::$app->request->get('delay', self::DELAY_DEFAULT_VALUE);
+
+        if (!is_numeric($delay) || (int)$delay < 0) {
+            throw new InvalidArgumentException('Invalid delay value');
+        }
+
+        return $delay;
     }
 }
